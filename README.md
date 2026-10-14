@@ -7,6 +7,7 @@ A [Claude Code plugin marketplace](https://code.claude.com/docs/en/plugins/creat
 | Plugin | What it does |
 | :- | :- |
 | [color-preview](plugins/color-preview) | Paints each colour code in Claude's replies with the colour it names |
+| [token-meter](plugins/token-meter) | Token, context window and quota meters above the prompt |
 
 ## Install
 

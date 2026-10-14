@@ -1,0 +1,16 @@
+{
+  "name": "token-meter",
+  "version": "0.1.0",
+  "description": "Token, context window and quota meters above the prompt",
+  "author": {
+    "name": "Wahiduzzaman Khan"
+  },
+  "homepage": "https://github.com/WahiduzzamanKhan/wahid-claude-tweaks/tree/main/plugins/token-meter",
+  "repository": "https://github.com/WahiduzzamanKhan/wahid-claude-tweaks",
+  "license": "MIT",
+  "keywords": [
+    "mod",
+    "usage"
+  ],
+  "types": "./types/index.d.ts"
+}

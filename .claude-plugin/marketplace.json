@@ -10,6 +10,13 @@
       "description": "Paints each colour code in Claude's replies with the colour it names",
       "category": "interface",
       "tags": ["mod", "colors"]
+    },
+    {
+      "name": "token-meter",
+      "source": "token-meter",
+      "description": "Token, context window and quota meters above the prompt",
+      "category": "interface",
+      "tags": ["mod", "usage"]
     }
   ]
 }
