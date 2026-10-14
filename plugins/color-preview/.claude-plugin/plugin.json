@@ -1,0 +1,9 @@
+{
+  "name": "color-preview",
+  "version": "0.1.0",
+  "description": "Paints each colour code in Claude's replies with the colour it names",
+  "author": { "name": "Wahiduzzaman Khan" },
+  "license": "MIT",
+  "keywords": ["mod", "colors"],
+  "types": "./types/index.d.ts"
+}

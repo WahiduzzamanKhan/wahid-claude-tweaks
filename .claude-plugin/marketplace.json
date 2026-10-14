@@ -1,0 +1,15 @@
+{
+  "name": "wahid-claude-tweaks",
+  "description": "Wahiduzzaman Khan's plugins and mods for Claude Code",
+  "owner": { "name": "Wahiduzzaman Khan" },
+  "metadata": { "pluginRoot": "./plugins" },
+  "plugins": [
+    {
+      "name": "color-preview",
+      "source": "color-preview",
+      "description": "Paints each colour code in Claude's replies with the colour it names",
+      "category": "interface",
+      "tags": ["mod", "colors"]
+    }
+  ]
+}
