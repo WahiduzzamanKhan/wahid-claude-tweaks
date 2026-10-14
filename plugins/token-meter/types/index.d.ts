@@ -8,6 +8,6 @@ export type Gauge = { context: ContextFill | null; rateLimits: Limit[]; usd: num
 
 declare module 'claude-code' {
   interface PluginState {
-    'token-meter': { sessionId: string; session: Tally; gauge: Gauge }
+    'token-meter': { sessionId: string; session: Tally; agents: number; gauge: Gauge }
   }
 }

@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register, SessionUsage } from 'claude-code'
+import type { EngineInterface, Register, SessionUsage, Timer } from 'claude-code'
 
 import type { Gauge, Tally } from '../types'
 
@@ -20,9 +20,12 @@ const EMPTY: Gauge = { context: null, rateLimits: [], usd: null }
 
 const sessionId = atom({ plugin: 'token-meter', key: 'sessionId' } as const, '')
 const session = atom({ plugin: 'token-meter', key: 'session' } as const, ZERO)
+// The part of the tally subagents used, every kind of token together.
+const agents = atom({ plugin: 'token-meter', key: 'agents' } as const, 0)
 const gauge = atom({ plugin: 'token-meter', key: 'gauge' } as const, EMPTY)
 
-type Entry = { tally: Tally }
+// A session's saved tally and when it last changed, in $.clock.now() milliseconds.
+type Entry = { tally: Tally; agents?: number; at?: number }
 // One coloured run of text; the line is a flat list of these.
 type Seg = [text: string, color?: string, bold?: boolean]
 
@@ -69,12 +72,14 @@ const toGauge = (u: Pick<SessionUsage, 'context' | 'rateLimits' | 'cost'>): Gaug
 // 2 compact (labels and numbers only).
 type Level = 0 | 1 | 2
 
-function sections(t: Tally, g: Gauge, now: number, level: Level): Seg[][] {
+function sections(t: Tally, sub: number, g: Gauge, now: number, level: Level): Seg[][] {
   const ctxPct = g.context?.percent ?? 0
 
   // Labels stay at every level: with no icons they are all that tells sections apart.
   const tokens: Seg[] = [['Tokens ', C.dim], [fmt(sum(t)), C.accent, true]]
   if (level === 0) tokens.push([` ↑${fmt(t.input + t.cacheRead + t.cacheWrite)} ↓${fmt(t.output)}`, C.dim])
+  // The total includes subagents; their share follows it, dropped first when space runs out.
+  if (sub > 0 && level < 2) tokens.push([` (agents ${fmt(sub)})`, C.dim])
 
   const context: Seg[] = [['Context ', C.dim]]
   if (level < 2) context.push(...meter(ctxPct, level === 0 ? 10 : 6))
@@ -110,37 +115,59 @@ const width = (segs: Seg[]) => segs.reduce((n, [text]) => n + text.length, 0)
 
 // The breakpoints: the richest single row that fits; failing that, one row
 // per section at the richest level whose widest section fits.
-function layout(t: Tally, g: Gauge, now: number, columns: number): Seg[][] {
+function layout(t: Tally, sub: number, g: Gauge, now: number, columns: number): Seg[][] {
   const levels: Level[] = [0, 1, 2]
   for (const level of levels) {
-    const [a = [], b = [], c = []] = sections(t, g, now, level)
+    const [a = [], b = [], c = []] = sections(t, sub, g, now, level)
     const row = [...a, SEP, ...b, SEP, ...c]
     if (width(row) <= columns) return [row]
   }
   for (const level of levels) {
-    const rows = sections(t, g, now, level)
+    const rows = sections(t, sub, g, now, level)
     if (Math.max(...rows.map(width)) <= columns) return rows
   }
-  return sections(t, g, now, 2)
+  return sections(t, sub, g, now, 2)
 }
 
 // Points the meter at a session: its saved tally (zero for a new one) and the
 // window and quota figures as they stand now. A hot reload keeps the same id,
 // and the tally with it.
+// How many sessions' tallies are kept; the store is shared and capped, and an
+// old session is rarely resumed.
+const KEEP = 50
+
+// Deletes all but the KEEP most recently used tallies, never the session in use.
+async function prune($: EngineInterface, current: string) {
+  const keys = (await $.store.keys()).filter(key => key.startsWith('s:') && key !== `s:${current}`)
+  if (keys.length < KEEP) return
+  const ages = await Promise.all(keys.map(async key => ({ key, at: ((await $.store.get(key)) as Entry | undefined)?.at ?? 0 })))
+  ages.sort((a, b) => b.at - a.at)
+  for (const { key } of ages.slice(KEEP - 1)) await $.store.delete(key)
+}
+
 async function follow($: EngineInterface, id: string) {
   if ((await read($, sessionId)) !== id) {
     const saved = (await $.store.get(`s:${id}`)) as Entry | undefined
     await update($, sessionId, () => id)
     await update($, session, () => saved?.tally ?? ZERO)
+    await update($, agents, () => saved?.agents ?? 0)
   }
   const usage = await $.session.usage()
   await update($, gauge, () => toGauge(usage))
 }
 
+// The reset countdowns move with the clock, not with usage, so the band is
+// redrawn each minute even while nothing else changes.
+let tick: Timer | null = null
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     const result = await next(e)
-    await follow($, await $.session.id())
+    const id = await $.session.id()
+    await follow($, id)
+    await prune($, id)
+    tick?.cancel()
+    tick = $.clock.every(60_000, () => $.ui.invalidate('ui.render'))
     return result
   })
 
@@ -169,9 +196,12 @@ export const register: Register = on => {
       cacheWrite: t.cacheWrite + u.cache_creation_input_tokens,
     }))
 
+    const used = u.input_tokens + u.output_tokens + u.cache_read_input_tokens + u.cache_creation_input_tokens
+    const sub = e.agentId ? await update($, agents, n => n + used) : await read($, agents)
+
     const id = await read($, sessionId)
     if (id) {
-      await $.store.set(`s:${id}`, { tally } satisfies Entry)
+      await $.store.set(`s:${id}`, { tally, agents: sub, at: await $.clock.now() } satisfies Entry)
     }
 
     return result
@@ -182,8 +212,11 @@ export const register: Register = on => {
 
     const t = await read($, session)
     const g = await read($, gauge)
-    const rows = layout(t, g, await $.clock.now(), e.props.bodyColumns)
+    const rows = layout(t, await read($, agents), g, await $.clock.now(), e.props.bodyColumns)
     const { Box, Text } = $.ui.resolve(e)
+    // What the mods after this one draw in the band (a skin's usage meters,
+    // say) goes under the line instead of being hidden by it.
+    const theirs = await next(e)
 
     return (
       <Box flexDirection="column" paddingTop={1}>
@@ -196,6 +229,7 @@ export const register: Register = on => {
             ))}
           </Box>
         ))}
+        {theirs}
       </Box>
     )
   })
