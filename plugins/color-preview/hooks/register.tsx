@@ -72,6 +72,74 @@ function paint(node: Node, pattern: RegExp, hits: { n: number }): Node {
   return node
 }
 
+type Props = Record<string, unknown>
+type Leaf = { text: string; props: Props } | { node: unknown }
+
+// A Text's children as a flat run of strings, each with the styles of the Texts
+// around it; anything else (a chip, a Link) stands on its own and breaks the run.
+function leavesOf(children: unknown, props: Props, out: Leaf[]): Leaf[] {
+  for (const child of Array.isArray(children) ? children : [children]) {
+    if (Array.isArray(child)) leavesOf(child, props, out)
+    else if (typeof child === 'string' || typeof child === 'number') out.push({ text: String(child), props })
+    else if (child === null || child === undefined || child === false) continue
+    else {
+      const node = child as RenderElement
+      if (node.type === 'Text' && !isChip(node)) {
+        const { children: inner, ...own } = (node.props ?? {}) as Props
+        leavesOf(node.children ?? inner, { ...props, ...own }, out)
+      } else out.push({ node })
+    }
+  }
+  return out
+}
+
+// Chips a code that another plugin split over several pieces, as a skin does
+// when it styles the numbers in `rgb(168, 95, 241)` apart. Null when no code
+// crosses a piece, so a Text with none keeps the shape it was drawn with.
+function across(
+  children: unknown,
+  pattern: RegExp,
+  make: (code: string, rgb: string) => unknown,
+  styled: (text: string, props: Props) => unknown,
+): unknown[] | null {
+  const leaves = leavesOf(children, {}, [])
+  if (leaves.length < 2) return null
+
+  // Where each piece starts in the joined text; a non-text piece joins as a
+  // character no code can contain, so no match reaches across it.
+  const starts: number[] = []
+  let joined = ''
+  for (const leaf of leaves) {
+    starts.push(joined.length)
+    joined += 'text' in leaf ? leaf.text : '\u0000'
+  }
+  const pieceAt = (offset: number) => starts.findLastIndex(start => start <= offset)
+
+  const spans: { from: number; to: number; code: string; rgb: string }[] = []
+  for (const m of joined.matchAll(pattern)) {
+    const rgb = toRgbHex(m[0])
+    const to = m.index + m[0].length
+    if (rgb !== null && pieceAt(m.index) !== pieceAt(to - 1)) spans.push({ from: m.index, to, code: m[0], rgb })
+  }
+  if (spans.length === 0) return null
+
+  const out: unknown[] = []
+  leaves.forEach((leaf, i) => {
+    if (!('text' in leaf)) return void out.push(leaf.node)
+    const start = starts[i] ?? 0
+    let at = start
+    const end = start + leaf.text.length
+    for (const span of spans) {
+      if (span.to <= at || span.from >= end) continue
+      if (span.from > at) out.push(styled(joined.slice(at, span.from), leaf.props))
+      if (span.from >= start) out.push(make(span.code, span.rgb))
+      at = Math.min(span.to, end)
+    }
+    if (at < end) out.push(styled(joined.slice(at, end), leaf.props))
+  })
+  return out
+}
+
 // Each colour the text names once, as written first, with the colour it paints.
 function codesIn(text: string, pattern: RegExp) {
   const seen = new Map<string, { code: string; rgb: string }>()
@@ -166,7 +234,13 @@ export const register: Register = on => {
       }
       return Array.isArray(children) ? children.map(inside) : children
     }
-    const painting: typeof Text = props => Text({ ...props, children: inside(props.children) as typeof props.children })
+    const styled = (text: string, props: Props) =>
+      Object.keys(props).length === 0 ? text : Text({ ...props, children: text })
+    const painting: typeof Text = props => {
+      const children = inside(props.children)
+      const joined = live === null ? null : across(children, live, chipOf, styled)
+      return Text({ ...props, children: (joined ?? children) as typeof props.children })
+    }
     return { ...table, Text: painting }
   })
 

@@ -169,3 +169,35 @@ test("codes are chipped inside a reply another plugin draws without passing it o
     await ui.unmount()
   }
 })
+
+// Styles each number apart, as a skin's highlighter does, so `rgb(168, 95, 241)`
+// reaches Text as several pieces: `rgb(`, `168`, `, `, `95` and so on.
+const highlighter = {
+  name: 'highlighter',
+  tier: 'prepend' as const,
+  register(on: (...args: any[]) => void) {
+    on('ui.render', { component: 'AssistantMessage' }, async ($: any, e: any) => {
+      const { Text } = $.ui.resolve(e)
+      const runs = String(e.props.text)
+        .split(/(\d+)/)
+        .filter(run => run !== '')
+        .map(run => (/^\d+$/.test(run) ? Text({ color: '#d4770c', children: run }) : Text({ children: run })))
+      return Text({ children: runs })
+    })
+  },
+}
+
+test('a code split into styled pieces by another plugin is chipped whole', { plugins: [highlighter] }, async ($, on) => {
+  on('ui.render', { component: 'AssistantMessage' }, async () => ({ type: 'Text', children: ['drawn by Claude Code'] }))
+  const line = 'Purple rgb(168, 95, 241), cyan hsl(189, 85%, 45%), green rgba(0, 168, 132, 0.5), gold #c7910c, 42 apples'
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount({ plugin: 'color-preview', surface, ...reply(line) })
+    expect((await ui.find({ type: 'Text', text: /^rgb\(168, 95, 241\)$/ }))?.props?.backgroundColor).toBe('#a85ff1')
+    expect((await ui.find({ type: 'Text', text: /^hsl\(189, 85%, 45%\)$/ }))?.props?.backgroundColor).toBeDefined()
+    expect((await ui.find({ type: 'Text', text: /^rgba\(0, 168, 132, 0\.5\)$/ }))?.props?.backgroundColor).toBe('#00a884')
+    expect((await ui.find({ type: 'Text', text: /^#c7910c$/ }))?.props?.backgroundColor).toBe('#c7910c')
+    // A number outside any code keeps the other plugin's style.
+    expect((await ui.find({ type: 'Text', text: /^42$/ }))?.props?.color).toBe('#d4770c')
+    await ui.unmount()
+  }
+})
