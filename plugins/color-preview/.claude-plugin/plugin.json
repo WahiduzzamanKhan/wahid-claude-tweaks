@@ -1,9 +1,16 @@
 {
   "name": "color-preview",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Paints each colour code in Claude's replies with the colour it names",
-  "author": { "name": "Wahiduzzaman Khan" },
+  "author": {
+    "name": "Wahiduzzaman Khan"
+  },
+  "homepage": "https://github.com/WahiduzzamanKhan/wahid-claude-tweaks/tree/main/plugins/color-preview",
+  "repository": "https://github.com/WahiduzzamanKhan/wahid-claude-tweaks",
   "license": "MIT",
-  "keywords": ["mod", "colors"],
+  "keywords": [
+    "mod",
+    "colors"
+  ],
   "types": "./types/index.d.ts"
 }

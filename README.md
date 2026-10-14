@@ -13,7 +13,7 @@ A [Claude Code plugin marketplace](https://code.claude.com/docs/en/plugins/creat
 Add the marketplace once:
 
 ```bash
-claude plugin marketplace add <github-user>/<repo>
+claude plugin marketplace add WahiduzzamanKhan/wahid-claude-tweaks
 ```
 
 Then install any plugin from it by name:

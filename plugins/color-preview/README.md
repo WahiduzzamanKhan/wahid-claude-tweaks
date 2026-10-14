@@ -45,7 +45,7 @@ Every format is on by default. Your choices are saved to the mod's store, so the
 From the [wahid-claude-tweaks](../../README.md) marketplace:
 
 ```bash
-claude plugin marketplace add <github-user>/<repo>
+claude plugin marketplace add WahiduzzamanKhan/wahid-claude-tweaks
 claude plugin install color-preview@wahid-claude-tweaks
 ```
 
