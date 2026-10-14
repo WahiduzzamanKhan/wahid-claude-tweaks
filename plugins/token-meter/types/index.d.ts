@@ -6,8 +6,20 @@ export type Limit = { kind: string; percentUsed: number; resetsAt?: string }
 
 export type Gauge = { context: ContextFill | null; rateLimits: Limit[]; usd: number | null }
 
+// What the settings pane switches: which sections show, the hourglass before
+// reset countdowns, and the percentages where meters turn amber and red.
+export type Prefs = {
+  tokens: boolean
+  agents: boolean
+  context: boolean
+  quota: boolean
+  hourglass: boolean
+  warnAt: number
+  hotAt: number
+}
+
 declare module 'claude-code' {
   interface PluginState {
-    'token-meter': { sessionId: string; session: Tally; agents: number; gauge: Gauge }
+    'token-meter': { sessionId: string; session: Tally; agents: number; gauge: Gauge; prefs: Prefs }
   }
 }

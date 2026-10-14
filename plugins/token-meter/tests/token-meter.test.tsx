@@ -19,6 +19,8 @@ const STEP_USAGE = { input_tokens: 1000, output_tokens: 200, cache_read_input_to
 function stubs(on: any, id: string, saved = new Map<string, unknown>()) {
   const clock = mock.clock(on)
   on('session.start', () => ({ cwd: '/work' }))
+  on('command.register', () => ({ value: undefined }))
+  on('ui.open', () => ({ value: { isPlaced: true } }))
   on('session.id', () => ({ value: id }))
   on('session.usage', () => ({ value: USAGE }))
   on('store.get', (_$: unknown, e: { key: string }) => ({ value: saved.get(e.key) }))
@@ -194,3 +196,117 @@ test("a resumed session brings back its subagents' share", async ($, on) => {
   await $.classic.SessionStart({ source: 'resume', session_id: 'old' })
   expect((await agentsText($))?.children?.[0]).toBe(' (agents 12k)')
 })
+
+const PANE = {
+  plugin: 'token-meter',
+  component: 'Pane' as const,
+  requestId: 'token-meter-settings',
+  props: { title: 'Token meter', isFocused: true, bodyColumns: 200, placement: 'inline' as const, scroll: { offset: 0, bodyRows: 14 }, view: {} },
+}
+
+const label = async (ui: any, key: string) => (await ui.find({ key }))?.props?.label
+
+test('/token-meter opens the settings pane', async ($, on) => {
+  stubs(on, 'abc')
+  const answer = await $.command.run({ command: 'token-meter', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 120 } })
+  expect(answer.text).toBe('Token meter settings opened.')
+})
+
+test('switching a section off hides it in the band and is saved', async ($, on) => {
+  const { saved } = stubs(on, 'abc')
+  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const pane = await $.ui.mount({ ...PANE, surface })
+    expect(await label(pane, 'context')).toMatch(/^● Context/)
+    await pane.press({ key: 'context' })
+    expect(await label(pane, 'context')).toMatch(/^○ Context/)
+    await pane.unmount()
+
+    const band = await $.ui.mount({ ...BAND, surface })
+    expect(await band.find({ type: 'Text', text: 'Context ' })).toBeUndefined()
+    expect(await band.find({ type: 'Text', text: 'Tokens ' })).toBeDefined()
+    await band.unmount()
+
+    // Back on for the next surface.
+    const again = await $.ui.mount({ ...PANE, surface })
+    await again.press({ key: 'context' })
+    await again.unmount()
+  }
+  expect(saved.get('prefs')).toMatchObject({ context: true })
+})
+
+test('the hourglass can be switched off for terminals without a Nerd Font', async ($, on) => {
+  stubs(on, 'abc')
+  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
+  const pane = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await pane.press({ key: 'hourglass' })
+  await pane.unmount()
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await band.find({ type: 'Text', text: '  2h14m' })).toBeDefined()
+  expect(await band.find({ type: 'Text', text: /\uf252/ })).toBeUndefined()
+  await band.unmount()
+})
+
+test('typed thresholds are saved and recolour the meters', async ($, on) => {
+  const { saved } = stubs(on, 'abc')
+  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const pane = await $.ui.mount({ ...PANE, surface })
+    expect((await pane.find({ key: 'warnAt' }))?.props?.placeholder).toBe(surface === 'terminal' ? '60' : '65')
+    // The 61% 5h window drops under amber once amber starts at 65%.
+    await pane.input({ key: 'warnAt', text: '65' })
+    await pane.input({ key: 'hotAt', text: '92%' })
+    // The fields are empty again, with the values in force as their placeholders.
+    expect((await pane.find({ key: 'warnAt' }))?.props).toMatchObject({ value: '', placeholder: '65' })
+    expect((await pane.find({ key: 'hotAt' }))?.props).toMatchObject({ value: '', placeholder: '92' })
+    await pane.unmount()
+  }
+  expect(saved.get('prefs')).toMatchObject({ warnAt: 65, hotAt: 92 })
+
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect((await band.find({ type: 'Text', text: ' 61%' }))?.props?.color).toBe('success')
+  await band.unmount()
+})
+
+test('a threshold that is not a whole percentage, or crosses the other, is refused', async ($, on) => {
+  const { saved } = stubs(on, 'abc')
+  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
+  const pane = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const refused = async (key: string, text: string, message: string) => {
+    await pane.input({ key, text })
+    expect(await pane.find({ type: 'Text', text: message })).toBeDefined()
+  }
+  await refused('warnAt', 'lots', 'Type a whole number from 1 to 99.')
+  await refused('warnAt', '62.5', 'Type a whole number from 1 to 99.')
+  await refused('hotAt', '100', 'Type a whole number from 1 to 99.')
+  await refused('warnAt', '85', 'Amber has to start below red (85%).')
+  await refused('hotAt', '60', 'Red has to start above amber (60%).')
+  expect(saved.get('prefs')).toBeUndefined()
+  // A good value clears the message.
+  await pane.input({ key: 'warnAt', text: '70' })
+  expect(await pane.find({ type: 'Text', text: /has to start|whole number/ })).toBeUndefined()
+  await pane.unmount()
+})
+
+test('with every section off the band shows only what other mods draw', async ($, on) => {
+  stubs(on, 'abc')
+  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
+  const pane = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  for (const key of ['tokens', 'context', 'quota']) await pane.press({ key })
+  expect(await pane.find({ type: 'Text', text: 'Every section is off, so the band is empty.' })).toBeDefined()
+  await pane.unmount()
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await band.find({ type: 'Text', text: /^(Tokens|Context|5h) $/ })).toBeUndefined()
+  await band.unmount()
+})
+
+for (const source of ['clear', 'resume', 'fork'] as const) {
+  test(`saved settings come back after a ${source} reset`, async ($, on) => {
+    stubs(on, 'abc', new Map<string, unknown>([['prefs', { context: false }]]))
+    await $.classic.SessionStart({ source, session_id: 'abc' })
+    const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    expect(await band.find({ type: 'Text', text: 'Context ' })).toBeUndefined()
+    expect(await band.find({ type: 'Text', text: 'Tokens ' })).toBeDefined()
+    await band.unmount()
+  })
+}
