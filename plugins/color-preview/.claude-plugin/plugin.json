@@ -1,6 +1,6 @@
 {
   "name": "color-preview",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Paints each colour code in Claude's replies with the colour it names",
   "author": {
     "name": "Wahiduzzaman Khan"

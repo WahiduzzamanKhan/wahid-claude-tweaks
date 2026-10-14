@@ -20,6 +20,7 @@ Because names match anywhere in a reply, everyday words that are also colour nam
 ## How it draws
 
 - **In place**: the chip replaces the code's own text at the same width, so tables and aligned columns stay aligned.
+- **Inside other plugins' replies**: a plugin that draws replies itself, such as a skin, gets a `Text` element from color-preview that chips colour codes as it draws. It works whichever of the two plugins runs first.
 - **Fallback row**: when the reply is drawn by something the mod can't reach into, such as Claude Code's own markdown, the colours appear as a row of chips under the reply instead. Each code shows once, as first written; repeats are matched ignoring case and spaces, but two different codes for the same colour, such as `#c7910c` and `rgb(199, 145, 12)`, each get a chip.
 
 ## Settings
@@ -61,8 +62,8 @@ claude --plugin-dir plugins/color-preview
 
 A mod runs with your permissions, so here is everything this one does, as reported by `claude plugin validate`:
 
-- **Hooks**: `session.start`, `classic.SessionStart`, `command.run` for `/color-preview`, and `ui.render` for its settings pane and for `AssistantMessage`
-- **Calls**: `$.command.register`, `$.state.get`/`set`, `$.store.get`/`set`, `$.ui.open`, `$.ui.resolve`
+- **Hooks**: `session.start`, `classic.SessionStart`, `command.run` for `/color-preview`, `ui.render` for its settings pane and for `AssistantMessage`, and `ui.resolve` for `AssistantMessage`, to hand other plugins a `Text` that chips colour codes
+- **Calls**: `$.command.register`, `$.state.get`/`set`, `$.store.get`/`set`, `$.ui.invalidate`, `$.ui.open`, `$.ui.resolve`
 
 It reads no files, starts no processes, makes no network requests and calls no model. The only thing it stores is the `formats` key, which holds your on/off choices.
 

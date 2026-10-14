@@ -143,3 +143,29 @@ test('saved formats come back after /clear', async ($, on) => {
   await ui.unmount()
   await pane.unmount()
 })
+
+// Draws every reply itself from the Text it is handed and never calls next, as a skin
+// does; prepended, so it runs before this plugin and this plugin's render hook never runs.
+const skin = {
+  name: 'skin',
+  tier: 'prepend' as const,
+  register(on: (...args: any[]) => void) {
+    on('ui.render', { component: 'AssistantMessage' }, async ($: any, e: any) => {
+      const { Box, Text } = $.ui.resolve(e)
+      return Box({ children: [Text({ children: e.props.text })] })
+    })
+  },
+}
+
+test("codes are chipped inside a reply another plugin draws without passing it on", { plugins: [skin] }, async ($, on) => {
+  on('ui.render', { component: 'AssistantMessage' }, async () => ({ type: 'Text', children: ['drawn by Claude Code'] }))
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount({ plugin: 'color-preview', surface, ...reply('Gold #c7910c and tomato, not #123') })
+    expect((await ui.find({ type: 'Text', text: /^#c7910c$/ }))?.props?.backgroundColor).toBe('#c7910c')
+    expect((await ui.find({ type: 'Text', text: /^tomato$/ }))?.props?.backgroundColor).toBe('#ff6347')
+    expect(await ui.find({ type: 'Text', text: /^#123$/ })).toBeUndefined()
+    // Each code is chipped once, with no extra row of chips under the reply.
+    expect(await ui.find({ type: 'Text', text: /^ #c7910c $/ })).toBeUndefined()
+    await ui.unmount()
+  }
+})

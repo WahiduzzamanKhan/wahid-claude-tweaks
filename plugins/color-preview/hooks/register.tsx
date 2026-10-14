@@ -9,6 +9,10 @@ type Node = RenderElement | string
 const PANE = 'color-preview-settings'
 const formats = atom({ plugin: 'color-preview', key: 'formats' } as const, ALL_ON)
 
+// The pattern for the formats switched on, kept beside the state for the Text
+// handed to other plugins, which draws without a $ to read the state through.
+let live: RegExp | null = patternFor(ALL_ON)
+
 // The settings pane's rows: each format, its hotkey and what it catches.
 const ROWS: { key: keyof Formats; hotkey: string; label: string; sample: string[] }[] = [
   { key: 'hex', hotkey: '1', label: 'Hex', sample: ['#c7910c', '#00a88480'] },
@@ -25,14 +29,14 @@ const chip = (code: string, rgb: string): RenderElement => ({
   children: [code],
 })
 
-function split(text: string, pattern: RegExp): Node[] | null {
+function split(text: string, pattern: RegExp, make = chip): Node[] | null {
   const parts: Node[] = []
   let at = 0
   for (const m of text.matchAll(pattern)) {
     const rgb = toRgbHex(m[0])
     if (rgb === null) continue
     if (m.index > at) parts.push(text.slice(at, m.index))
-    parts.push(chip(m[0], rgb))
+    parts.push(make(m[0], rgb))
     at = m.index + m[0].length
   }
   if (at === 0) return null
@@ -40,10 +44,22 @@ function split(text: string, pattern: RegExp): Node[] | null {
   return parts
 }
 
+// A chip already drawn, by the Text handed to another plugin: its one string
+// names the colour behind it.
+function isChip(node: RenderElement): boolean {
+  if (node.type !== 'Text') return false
+  const [only, ...rest] = node.children ?? []
+  return rest.length === 0 && typeof only === 'string' && toRgbHex(only) === node.props?.backgroundColor
+}
+
 // Walks a drawn tree and chips every colour code in its strings, each string
 // becoming a Text of plain runs and chips (valid under a Box and inside a Text).
 // Leaves (Code, Markdown, Svg, the engine's own drawing) are left as drawn.
 function paint(node: Node, pattern: RegExp, hits: { n: number }): Node {
+  if (typeof node !== 'string' && isChip(node)) {
+    hits.n += 1
+    return node
+  }
   if (typeof node === 'string') {
     const parts = split(node, pattern)
     if (parts === null) return node
@@ -70,7 +86,8 @@ function codesIn(text: string, pattern: RegExp) {
 // Saved choices win; a format added later starts on.
 async function loadSaved($: EngineInterface) {
   const saved = (await $.store.get('formats')) as Partial<Formats> | undefined
-  await update($, formats, () => ({ ...ALL_ON, ...saved }))
+  const next = await update($, formats, () => ({ ...ALL_ON, ...saved }))
+  live = patternFor(next)
 }
 
 export const register: Register = on => {
@@ -98,7 +115,10 @@ export const register: Register = on => {
     const now = await read($, formats)
     const toggle = (key: keyof Formats) => async () => {
       const next = await update($, formats, f => ({ ...f, [key]: !f[key] }))
+      live = patternFor(next)
       await $.store.set('formats', next)
+      // Replies another plugin drew repaint only when asked.
+      $.ui.invalidate('ui.render')
     }
 
     return (
@@ -130,6 +150,24 @@ export const register: Register = on => {
         </Box>
       </Box>
     )
+  })
+
+  // Another plugin that draws a reply itself (a skin, say) may never pass it on
+  // to the hook below. The Text it draws with is handed out here, so colour
+  // codes in its strings are chipped wherever this plugin sits in the order.
+  on('ui.resolve', { component: 'AssistantMessage' }, async ($, e, next) => {
+    const table = await next(e)
+    const Text = table.Text
+    const chipOf = (code: string, rgb: string) => Text({ backgroundColor: rgb, color: inkOn(rgb), children: code })
+    const inside = (children: unknown): unknown => {
+      if (typeof children === 'string') {
+        const parts = live === null ? null : split(children, live, chipOf)
+        return parts ?? children
+      }
+      return Array.isArray(children) ? children.map(inside) : children
+    }
+    const painting: typeof Text = props => Text({ ...props, children: inside(props.children) as typeof props.children })
+    return { ...table, Text: painting }
   })
 
   on('ui.render', { component: 'AssistantMessage' }, async ($, e, next) => {
