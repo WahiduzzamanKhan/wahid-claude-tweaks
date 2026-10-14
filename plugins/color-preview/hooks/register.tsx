@@ -166,10 +166,11 @@ export const register: Register = on => {
     return result
   })
 
-  // /clear resets state to its defaults and session.start does not fire again, so load the saved choices here too.
-  on('classic.SessionStart', async ($, e, next) => {
+  // /clear, /resume and /branch (reported as fork) reset state to its defaults and
+  // session.start does not fire again, so load the saved choices here too.
+  on('classic.SessionStart', { source: ['clear', 'resume', 'fork'] }, async ($, e, next) => {
     const result = await next(e)
-    if (e.source === 'clear') await loadSaved($)
+    await loadSaved($)
     return result
   })
 

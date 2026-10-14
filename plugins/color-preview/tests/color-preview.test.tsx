@@ -128,21 +128,23 @@ test('with every format off a reply is left as drawn', async ($, on) => {
   await pane.unmount()
 })
 
-test('saved formats come back after /clear', async ($, on) => {
-  on('store.get', async (_$, e) => ({ value: e.key === 'formats' ? { named: false } : undefined }))
-  on('classic.SessionStart', () => ({}))
-  const line = 'the red line, #c7910c'
-  on('ui.render', { component: 'AssistantMessage' }, async () => ({ type: 'Text', children: [line] }))
-  await $.classic.SessionStart({ source: 'clear' })
+for (const source of ['clear', 'resume', 'fork'] as const) {
+  test(`saved formats come back after a ${source} reset`, async ($, on) => {
+    on('store.get', async (_$, e) => ({ value: e.key === 'formats' ? { named: false } : undefined }))
+    on('classic.SessionStart', () => ({}))
+    const line = 'the red line, #c7910c'
+    on('ui.render', { component: 'AssistantMessage' }, async () => ({ type: 'Text', children: [line] }))
+    await $.classic.SessionStart({ source })
 
-  const pane = await $.ui.mount({ plugin: 'color-preview', surface: 'terminal', ...PANE })
-  expect((await pane.find({ key: 'named' }))?.props?.label).toMatch(/^○ CSS names/)
-  const ui = await $.ui.mount({ plugin: 'color-preview', surface: 'terminal', ...reply(line) })
-  expect(await ui.find({ type: 'Text', text: /^red$/ })).toBeUndefined()
-  expect(await ui.find({ type: 'Text', text: /^#c7910c$/ })).toBeDefined()
-  await ui.unmount()
-  await pane.unmount()
-})
+    const pane = await $.ui.mount({ plugin: 'color-preview', surface: 'terminal', ...PANE })
+    expect((await pane.find({ key: 'named' }))?.props?.label).toMatch(/^○ CSS names/)
+    const ui = await $.ui.mount({ plugin: 'color-preview', surface: 'terminal', ...reply(line) })
+    expect(await ui.find({ type: 'Text', text: /^red$/ })).toBeUndefined()
+    expect(await ui.find({ type: 'Text', text: /^#c7910c$/ })).toBeDefined()
+    await ui.unmount()
+    await pane.unmount()
+  })
+}
 
 // Draws every reply itself from the Text it is handed and never calls next, as a skin
 // does; prepended, so it runs before this plugin and this plugin's render hook never runs.
