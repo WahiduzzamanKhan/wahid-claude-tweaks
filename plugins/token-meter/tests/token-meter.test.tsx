@@ -215,6 +215,10 @@ test('/token-meter opens the settings pane', async ($, on) => {
 test('switching a section off hides it in the band and is saved', async ($, on) => {
   const { saved } = stubs(on, 'abc')
   await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
+  // Let the band show on desktop too, so both apps can be checked.
+  const first = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await first.press({ key: 'terminalOnly' })
+  await first.unmount()
   for (const surface of ['terminal', 'desktop'] as const) {
     const pane = await $.ui.mount({ ...PANE, surface })
     expect(await label(pane, 'context')).toMatch(/^● Context/)
@@ -310,3 +314,39 @@ for (const source of ['clear', 'resume', 'fork'] as const) {
     await band.unmount()
   })
 }
+
+test('by default the band shows in the terminal and not in the VS Code panel or the desktop app', async ($, on) => {
+  stubs(on, 'abc')
+  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
+  const terminal = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await terminal.find({ type: 'Text', text: 'Tokens ' })).toBeDefined()
+  await terminal.unmount()
+  for (const surface of ['vscode', 'desktop'] as const) {
+    const ui = await $.ui.mount({ ...BAND, surface })
+    expect(await ui.find({ type: 'Text', text: 'Tokens ' })).toBeUndefined()
+    await ui.unmount()
+  }
+})
+
+test('switching "Show in terminal only" off shows the band in the desktop app, and is saved', async ($, on) => {
+  const { saved } = stubs(on, 'abc')
+  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
+  // The pane opens in the desktop app too, so the setting can be changed there.
+  const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(await label(pane, 'terminalOnly')).toMatch(/^● Show in terminal only/)
+  await pane.press({ key: 'terminalOnly' })
+  expect(await label(pane, 'terminalOnly')).toMatch(/^○ Show in terminal only/)
+  await pane.unmount()
+  expect(saved.get('prefs')).toMatchObject({ terminalOnly: false })
+  const desktop = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  expect(await desktop.find({ type: 'Text', text: 'Tokens ' })).toBeDefined()
+  await desktop.unmount()
+})
+
+test('tokens are still counted while the band is hidden', async ($, on) => {
+  const { saved } = stubs(on, 'abc')
+  await $.session.start({ surface: 'desktop', isInteractive: true, cwd: '/work' })
+  await step($)
+  expect(saved.get('s:abc')).toMatchObject({ tally: { input: 1000, output: 200, cacheRead: 3000, cacheWrite: 800 } })
+  expect(await bandText($)).toBe('5k')
+})

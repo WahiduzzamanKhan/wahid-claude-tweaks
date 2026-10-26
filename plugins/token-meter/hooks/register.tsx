@@ -24,7 +24,7 @@ const session = atom({ plugin: 'token-meter', key: 'session' } as const, ZERO)
 const agents = atom({ plugin: 'token-meter', key: 'agents' } as const, 0)
 const gauge = atom({ plugin: 'token-meter', key: 'gauge' } as const, EMPTY)
 
-const DEFAULTS: Prefs = { tokens: true, agents: true, context: true, quota: true, hourglass: true, warnAt: 60, hotAt: 85 }
+const DEFAULTS: Prefs = { tokens: true, agents: true, context: true, quota: true, hourglass: true, terminalOnly: true, warnAt: 60, hotAt: 85 }
 const prefs = atom({ plugin: 'token-meter', key: 'prefs' } as const, DEFAULTS)
 
 // A threshold as typed: a whole percentage from 1 to 99, or why it is refused.
@@ -181,12 +181,13 @@ async function follow($: EngineInterface, id: string) {
 const PANE = 'token-meter-settings'
 
 // The settings pane's switches: each one, its hotkey and what it changes.
-const SWITCHES: { key: 'tokens' | 'agents' | 'context' | 'quota' | 'hourglass'; hotkey: string; label: string; note: string }[] = [
+const SWITCHES: { key: 'tokens' | 'agents' | 'context' | 'quota' | 'hourglass' | 'terminalOnly'; hotkey: string; label: string; note: string }[] = [
   { key: 'tokens', hotkey: '1', label: 'Tokens', note: 'this session\'s total, with input and output' },
   { key: 'agents', hotkey: '2', label: 'Subagents\' share', note: 'shown after the total, as in (agents 300k)' },
   { key: 'context', hotkey: '3', label: 'Context', note: 'how full the context window is' },
   { key: 'quota', hotkey: '4', label: 'Quota', note: 'plan limits, or cost without them' },
   { key: 'hourglass', hotkey: '5', label: 'Hourglass icon', note: 'before reset countdowns; needs a Nerd Font' },
+  { key: 'terminalOnly', hotkey: '6', label: 'Show in terminal only', note: 'hide the line in non-terminal sessions' },
 ]
 
 // The settings pane's thresholds, typed in as percentages.
@@ -287,7 +288,7 @@ export const register: Register = on => {
                 plain
                 key={row.key}
                 hotkey={row.hotkey}
-                label={`${now[row.key] ? '●' : '○'} ${row.label.padEnd(16)}`}
+                label={`${now[row.key] ? '●' : '○'} ${row.label.padEnd(21)}`}
                 dimColor={!now[row.key]}
                 onPress={change(p => ({ ...p, [row.key]: !p[row.key] }))}
               />
@@ -332,6 +333,8 @@ export const register: Register = on => {
     if (e.props.hasSurvey) return next(e)
 
     const p = await read($, prefs)
+    // Counting goes on everywhere; only the drawing waits for a terminal.
+    if (p.terminalOnly && e.surface !== 'terminal') return next(e)
     const rows = layout(await read($, session), await read($, agents), await read($, gauge), await $.clock.now(), e.props.bodyColumns, p)
     // What the mods after this one draw in the band (a skin's usage meters,
     // say) goes under the line instead of being hidden by it.

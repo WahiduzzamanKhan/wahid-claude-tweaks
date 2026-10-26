@@ -39,7 +39,7 @@ Every format is on by default. Your choices are saved to the mod's store, so the
 ## Requirements
 
 - Claude Code **v2.1.287** or later in the terminal, or a Desktop app whose Code tab runs v2.1.286 or later. Tested with **Claude Code 2.1.287**. Mod events and methods can change between releases, so if something stops working after an update, check that version first.
-- Chips are drawn in the terminal and in the Code tab of the Desktop app. In the VS Code extension's chat panel, `claude -p`, the Agent SDK and cloud sessions, the mod loads but draws nothing. See [Where mods run](https://code.claude.com/docs/en/plugins/mods/overview#where-mods-run).
+- Chips are drawn in the terminal, the Code tab of the Desktop app and the VS Code extension's panel. In `claude -p`, the Agent SDK and cloud sessions, the mod loads but draws nothing.
 
 ## Install
 

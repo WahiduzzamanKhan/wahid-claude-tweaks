@@ -33,10 +33,11 @@ Run `/token-meter` to open the settings pane. Press a key to switch a part of th
 | `3` | Show Context |
 | `4` | Show Quota |
 | `5` | Show the hourglass before reset countdowns (switch off without a Nerd Font) |
+| `6` | Show in terminal only: hide the line in the VS Code extension's panel and the Claude Desktop app |
 
 To change where meters turn amber or red, press Tab to reach the **Amber from %** or **Red from %** field, type a whole number from 1 to 99, and press Enter. Each field shows the value in force, dimmed, until you type over it. Amber has to start below red; a value that doesn't fit is refused with the reason.
 
-Everything is on by default, with amber from 60% and red from 85%. A preview under the settings shows the line with your current figures. Your choices are saved for every session on this machine and come back after `/clear`, `/resume` and `/branch`. Esc closes the pane.
+Everything is on by default, with amber from 60% and red from 85%. With **Show in terminal only** on, token-meter still counts tokens in the VS Code panel and the Desktop app but draws nothing there; the settings pane opens everywhere, so you can switch it back from any of them. A preview under the settings shows the line with your current figures. Your choices are saved for every session on this machine and come back after `/clear`, `/resume` and `/branch`. Esc closes the pane.
 
 ## Install
 
@@ -49,7 +50,7 @@ If you install or update it while a session is open, run `/reload-plugins` in th
 
 ## Requirements
 
-- Claude Code **v2.1.287** or later in the terminal, or a Desktop app whose Code tab runs v2.1.286 or later.
+- Claude Code **v2.1.287** or later in the terminal, or a Desktop app whose Code tab runs v2.1.286 or later. By default the line only shows in the terminal, including a terminal inside VS Code or a JetBrains IDE, and not in the VS Code extension's panel or the Desktop app.
 - The reset countdown uses a [Nerd Font](https://www.nerdfonts.com/) hourglass icon. Without a Nerd Font, that one character shows as a blank or a box; switch it off with `5` in `/token-meter`.
 - Another mod that draws in the band above the prompt, such as a skin's usage meters, shows under token-meter's line. If that mod runs first and draws the band without passing it on, it hides token-meter; turn one of them off.
 
